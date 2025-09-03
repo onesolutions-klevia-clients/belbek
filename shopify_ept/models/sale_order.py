@@ -15,6 +15,7 @@ from markupsafe import Markup
 from ..shopify.pyactiveresource.util import xml_to_dict
 from .. import shopify
 from ..shopify.pyactiveresource.connection import ClientError
+from odoo.tools.float_utils import float_is_zero
 
 utc = pytz.utc
 
@@ -239,7 +240,7 @@ class SaleOrder(models.Model):
                 for discount_allocation in line.get("discount_allocations"):
                     if instance.order_visible_currency:
                         discount_total_price = self.get_price_based_on_customer_visible_currency(
-                            discount_allocation.get("amount_set"), order_response, discount_amount)
+                            discount_allocation.get("amount_set"), order_response, 0)
                         if discount_total_price:
                             discount_amount += float(discount_total_price)
                     else:
@@ -590,11 +591,14 @@ class SaleOrder(models.Model):
             if work_flow_process_record.invoice_date_is_order_date:
                 if self.check_fiscal_year_lock_date_ept():
                     return True
-            if work_flow_process_record.sale_journal_id:
-                invoices = self.with_context(journal_ept=work_flow_process_record.sale_journal_id)._create_invoices(
-                    final=True)
-            else:
-                invoices = self._create_invoices(final=True)
+            invoiceable_lines = self._get_invoiceable_lines(False)
+            invoices = self.env['account.move']
+            if invoiceable_lines:
+                if work_flow_process_record.sale_journal_id:
+                    invoices = self.with_context(journal_ept=work_flow_process_record.sale_journal_id)._create_invoices(
+                        final=True)
+                else:
+                    invoices = self._create_invoices(final=True)
             self.validate_invoice_ept(invoices)
             if self.shopify_instance_id and self.env.context.get(
                     'shopify_order_financial_status') and self.env.context.get(
@@ -1399,7 +1403,7 @@ class SaleOrder(models.Model):
             price = float(tax.get('price', 0.0))
             title = tax.get("title")
             rate = rate * 100
-            if rate != 0.0 and price != 0.0:
+            if not float_is_zero(rate, precision_digits=2) and not float_is_zero(price, precision_digits=2):
                 if tax_included:
                     name = "%s_(%s %s included)_%s" % (title, str(rate), "%", company.name)
                     price_include_override = "tax_included"
@@ -1437,11 +1441,20 @@ class SaleOrder(models.Model):
             {"account_id": instance.invoice_tax_account_id.id if instance.invoice_tax_account_id else False})
         account_tax_id.mapped("refund_repartition_line_ids").write(
             {"account_id": instance.credit_tax_account_id.id if instance.credit_tax_account_id else False})
-        if instance.shopify_tax_group_id:
-            account_tax_id.tax_group_id = instance.shopify_tax_group_id
         if instance.shopify_tax_grid_id:
             account_tax_id.mapped("invoice_repartition_line_ids").write({"tag_ids": instance.shopify_tax_grid_id.ids})
             account_tax_id.mapped("refund_repartition_line_ids").write({"tag_ids": instance.shopify_tax_grid_id.ids})
+            
+        if instance.is_create_tax_group:
+            vals = {
+                'name': name,
+                'company_id': company.id,
+                'tax_receivable_account_id': instance.tax_group_receivable_account_id.id,
+                'tax_payable_account_id': instance.tax_group_payable_account_id.id,
+            }
+            tax_group = self.env['account.tax.group'].sudo().create(vals)
+            if tax_group:
+                account_tax_id.tax_group_id = tax_group.id
 
         return account_tax_id
 
@@ -1451,7 +1464,9 @@ class SaleOrder(models.Model):
         """
         final_transactions_result = []
         for result in transactions:
-            if result.get('kind') in ['void', 'capture', 'authorization'] and result.get(
+            if "Cash on Delivery" in result.get("gateway"):
+                final_transactions_result.append(result)
+            if result.get('kind') in ['void', 'capture', 'authorization', 'refund'] and result.get(
                     'status') == 'success' and result.get('parent_id'):
                 dict_index = next((index for (index, transaction_data) in enumerate(final_transactions_result) if
                                    transaction_data["id"] == result.get('parent_id')), None)
@@ -1462,7 +1477,7 @@ class SaleOrder(models.Model):
         return final_transactions_result
 
     def prepare_vals_shopify_multi_payment(self, instance, order_data_queue_line, order_response,
-                                           payment_gateway, workflow):
+                                           payments_gateway, workflow):
         """ This method is used to prepare a values for the multi payment.
             @author: Meera Sidapara @Emipro Technologies Pvt. Ltd on date 16/11/2021 .
             Task_id:179257 - Manage multiple payment.
@@ -2082,6 +2097,7 @@ class SaleOrder(models.Model):
         """
         common_log_line_obj = self.env["common.log.lines.ept"]
         orders = self
+        queueline_count = 0
         for queue_line in queue_lines:
             shopify_instance = queue_line.shopify_instance_id
             order_data = json.loads(queue_line.order_data)
@@ -2171,6 +2187,12 @@ class SaleOrder(models.Model):
                                                                order_ref=order_data.get('name'),
                                                                shopify_order_data_queue_line_id=queue_line.id if queue_line else False)
                 queue_line.write({'state': 'failed', 'processed_at': datetime.now()})
+            queueline_count += 1
+            if queueline_count == 20:
+                queueline_count = 0
+                _logger.info(
+                    f'Commit the Data till the Queue line {queue_line.name} for Queue {queue_line.shopify_order_data_queue_id.name}')
+                self._cr.commit()
         return orders
 
     def update_tag_in_shopify_order(self, order, shopify_tags):
@@ -2393,9 +2415,18 @@ class SaleOrder(models.Model):
                 order.action_confirm()
             if order.invoice_status in ['no', 'to invoice']:
                 order_lines = order.mapped('order_line').filtered(lambda l: l.product_id.invoice_policy == 'order')
-                if not order_lines.filtered(lambda l: l.product_id.type == 'product') and len(
-                        order.order_line) != len(
-                    order_lines.filtered(lambda l: l.product_id.type in ['service', 'consu'])):
+                picking = order.picking_ids.filtered(
+                    lambda p: p.location_dest_id.usage == 'customer' and p.state == 'done')
+                delivery_lines = picking.move_line_ids.filtered(lambda l: l.product_id.invoice_policy == 'delivery')
+                if workflow and delivery_lines and workflow.create_invoice:
+                    _logger.info(f'Calling the invoice creation process')
+                    order.with_context(shopify_order_financial_status=shopify_status).validate_and_paid_invoices_ept(
+                        workflow)
+                    queue_line.state = "done"
+                elif not order_lines.filtered(
+                        lambda l: l.product_id.type == 'consu' and l.product_id.is_storable) and len(
+                    order.order_line) != len(order_lines.filtered(
+                    lambda l: l.product_id.type in ['service', 'consu'] and not l.product_id.is_storable)):
                     queue_line.state = "done"
                 else:
                     order.with_context(shopify_order_financial_status=shopify_status).validate_and_paid_invoices_ept(
@@ -2422,9 +2453,10 @@ class SaleOrder(models.Model):
                 work_flow_process_record = self.auto_workflow_process_id
                 if work_flow_process_record:
                     order_lines = self.mapped('order_line').filtered(lambda l: l.product_id.invoice_policy == 'order')
-                    if not order_lines.filtered(lambda l: l.product_id.type == 'product') and len(
-                            self.order_line) != len(
-                        order_lines.filtered(lambda l: l.product_id.type in ['service', 'consu'])):
+                    if not order_lines.filtered(
+                            lambda l: l.product_id.type == 'consu' and l.product_id.is_storable) and len(
+                        self.order_line) != len(order_lines.filtered(
+                        lambda l: l.product_id.type in ['service', 'consu'] and not l.product_id.is_storable)):
                         return True
                     self.webhook_call_auto_invoice_workflow(work_flow_process_record)
 
@@ -2600,9 +2632,10 @@ You can take the following actions manually:\n 1. Reserve Order: If the order ha
             queue_line.write({'state': 'done', 'processed_at': datetime.now()})
             order_lines = self.mapped('order_line').filtered(lambda l: l.product_id.invoice_policy == 'order')
             self.write({'order_line': data})
-            if not order_lines.filtered(lambda l: l.product_id.type == 'product') and len(
-                    self.order_line) != len(
-                order_lines.filtered(lambda l: l.product_id.type in ['service', 'consu'])):
+            if not order_lines.filtered(
+                    lambda l: l.product_id.type == 'consu' and l.product_id.is_storable) and len(
+                self.order_line) != len(order_lines.filtered(
+                lambda l: l.product_id.type in ['service', 'consu'] and not l.product_id.is_storable)):
                 return True
             if instance.update_qty_to_invoice_order_webhook:
                 self.webhook_call_auto_invoice_workflow(work_flow_process_record)
@@ -2616,11 +2649,14 @@ You can take the following actions manually:\n 1. Reserve Order: If the order ha
             if work_flow_process_record.invoice_date_is_order_date:
                 if self.check_fiscal_year_lock_date_ept():
                     return True
-            if work_flow_process_record.sale_journal_id:
-                invoices = self.with_context(journal_ept=work_flow_process_record.sale_journal_id)._create_invoices(
-                    final=True)
-            else:
-                invoices = self._create_invoices(final=True)
+            invoiceable_lines = self._get_invoiceable_lines(False)
+            invoices = self.env['account.move']
+            if invoiceable_lines:
+                if work_flow_process_record.sale_journal_id:
+                    invoices = self.with_context(journal_ept=work_flow_process_record.sale_journal_id)._create_invoices(
+                        final=True)
+                else:
+                    invoices = self._create_invoices(final=True)
             self.validate_invoice_ept(invoices)
             if work_flow_process_record.register_payment:
                 self.paid_invoice_ept(invoices)
@@ -2795,6 +2831,17 @@ You can take the following actions manually:\n 1. Reserve Order: If the order ha
                         move._set_quantity_done(move.product_uom_qty)
                         need_validate_transfer = True
                     if need_validate_transfer:
+                        message = "Picking is forcefully done by Webhook as Order is fulfilled in Shopify."
+                        self.transfer_validate_ept(picking)
+                elif picking.state not in ("assigned", "done") and any(
+                        move.product_id.tracking != 'none' for move in picking.move_ids):
+                    need_validate_transfer = False
+                    for move in picking.move_ids_without_package:
+                        move.picked = False
+                        move._action_assign()
+                        # move._set_quantity_done(move.product_uom_qty)
+                        need_validate_transfer = True
+                    if need_validate_transfer and picking.state == 'assigned':
                         message = "Picking is forcefully done by Webhook as Order is fulfilled in Shopify."
                         self.transfer_validate_ept(picking)
                 if picking.state == "done":
@@ -3278,6 +3325,17 @@ You can take the following actions manually:\n 1. Reserve Order: If the order ha
                         if need_validate_picking:
                             self.transfer_validate_ept(transfer)
                             message = "Picking is forcefully done by Webhook as Order is fulfilled in Shopify."
+                    elif transfer.state == "assigned":
+                        need_to_validate_picking = False
+                        for move in transfer.move_ids_without_package:
+                            sku = move.product_id.default_code
+                            if fulfillment_product_data.get(sku):
+                                move._set_quantity_done(fulfillment_product_data.get(sku))
+                                need_to_validate_picking = True
+                            else:
+                                move._set_quantity_done(0)
+                        if need_to_validate_picking:
+                            self.transfer_validate_ept(transfer)
                     if transfer.state == "done":
                         transfer.message_post(body=_(message))
                         vals = {'updated_in_shopify': True, 'shopify_fulfillment_id': fulfillment_data_id}

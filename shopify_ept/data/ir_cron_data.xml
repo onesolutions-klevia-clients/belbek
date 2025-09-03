@@ -180,5 +180,17 @@
             <field name="model_id" ref="model_shopify_product_data_queue_ept"/>
             <field name="code">model.import_product_cron_action()</field>
         </record>
+
+        <!--Cron Jon to reset the queue process count -->
+        <record id="shopify_order_queue_reset_execution_count" model="ir.cron">
+            <field name="name">Shopify: Reset Order Queue Process Count</field>
+            <field name="model_id" ref="model_shopify_order_data_queue_line_ept"/>
+            <field name="state">code</field>
+            <field eval="False" name="active"/>
+            <field name="code">model.auto_reset_order_queue_data_process_count()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">12</field>
+            <field name="interval_type">hours</field>
+        </record>
     </data>
 </odoo>

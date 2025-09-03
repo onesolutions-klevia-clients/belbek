@@ -372,7 +372,16 @@ class ShopifyInstanceEpt(models.Model):
                                           domain=[('applicability', '=', 'taxes')],
                                           help="Tax distribution line that caused the creation of this move line, if any")
 
-    shopify_tax_group_id = fields.Many2one(comodel_name='account.tax.group', string="Tax Group")
+    is_create_tax_group = fields.Boolean(string="Auto Create Tax Group?", default=False, copy=False)
+
+    tax_group_payable_account_id = fields.Many2one(
+        comodel_name='account.account',
+        string='Tax Payable Account',
+        help="Tax current account used as a counterpart to the Tax Closing Entry when in favor of the authorities.")
+    tax_group_receivable_account_id = fields.Many2one(
+        comodel_name='account.account',
+        string='Tax Receivable Account',
+        help="Tax current account used as a counterpart to the Tax Closing Entry when in favor of the company.")
 
     _sql_constraints = [('unique_host', 'unique(shopify_host)',
                          "Instance already exists for given host. Host must be Unique for the instance!")]
@@ -1223,3 +1232,47 @@ class ShopifyInstanceEpt(models.Model):
             interval = days
         interval_in_seconds = _secondsConverter[interval_type](interval)
         return interval_in_seconds
+
+    @api.model
+    def create_update_correct_shipping_product(self):
+        """
+            This method searchs for the instance shipping product and if not found then
+            create a new shipiing product for it.
+            @param : instance - obj of the Instance.
+            @author : Gopal Chouhan on 20 May,2025
+        """
+        shipping_product = self.env.ref('shopify_ept.shopify_shipping_product', False)
+        all_instances = self.search([])
+        for inst in all_instances:
+            instance_shipping_product = self.env.ref(f'shopify_ept.shopify_shipping_product{inst.id}', False)
+            if instance_shipping_product:
+                continue
+            vals = {
+                'name': f'{shipping_product.name} {inst.id}',
+                'default_code': f'{shipping_product.default_code}{inst.id}'
+            }
+            new_shipping_product = shipping_product.copy(default=vals)
+            message = (f'Shipping Product created for Shopify Instance [{inst.name}].\n '
+                       f'Do Not change the internal Reference manually for this product')
+            new_shipping_product.message_post(body=message)
+            new_shipping_product.product_tmpl_id.message_post(body=message)
+            name = f'shopify_shipping_product{inst.id}'
+            self.create_ir_module_data_rec(name, 'product.product',
+                                           new_shipping_product)
+
+            inst.shipping_product_id = new_shipping_product
+        return True
+
+    def create_ir_module_data_rec(self, name, model, object):
+
+        """ This method is used to create the Ir model data record for any object of any model exist in database.
+            @param: name - name of the data record
+            @param : model - model for which this record to be created.
+            @param : object : object required for the res id.
+            @author : Gopal chouhan on may 20, 2025
+        """
+        self.env['ir.model.data'].create({'module': 'shopify_ept',
+                                          'name': name,
+                                          'model': model,
+                                          'res_id': object.id,
+                                          'noupdate': True})

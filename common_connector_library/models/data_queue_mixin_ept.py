@@ -8,14 +8,14 @@ ALL_QUEUE_TABLES = [
     # All connector Queues
   'woo_coupon_data_queue_ept', 'woo_customer_data_queue_ept','woo_export_stock_queue_ept','woo_order_data_queue_ept','woo_product_data_queue_ept',
   'shopify_customer_data_queue_ept', 'shopify_export_stock_queue_ept', 'shopify_order_data_queue_ept', 'shopify_product_data_queue_ept',
-  'ebay_import_product_queue', 'ebay_order_data_queue_ept',
+  'ebay_import_product_queue', 'ebay_order_data_queue_ept', 'ebay_export_stock_queue_ept'
   'walmart_order_queue_ept',
   'bol_queue_ept', 'bol_shipped_data_queue_ept', 'bol_return_queue_ept',
   'magento_export_stock_queue_ept', 'magento_customer_data_queue_ept', 'magento_order_data_queue_ept', 'sync_import_magento_product_queue', 'woo_coupon_data_queue_line_ept',
 
   # All connector queuelines
   'woo_customer_data_queue_line_ept', 'woo_export_stock_queue_line_ept', 'woo_order_data_queue_line_ept', 'woo_product_data_queue_line_ept',
-  'ebay_order_data_queue_line_ept', 'ebay_import_product_queue_line',
+  'ebay_order_data_queue_line_ept', 'ebay_import_product_queue_line', 'ebay_export_stock_queue_line_ept'
   'walmart_order_queue_line_ept',
   'shopify_customer_data_queue_line_ept', 'shopify_export_stock_queue_line_ept', 'shopify_order_data_queue_line_ept', 'shopify_product_data_queue_line_ept',
   'bol_order_data_queue_line_ept', 'bol_shipped_data_queue_line_ept', 'bol_return_queue_line_ept',

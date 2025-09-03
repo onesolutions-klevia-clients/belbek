@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # See LICENSE file for full copyright and licensing details.
 
-from odoo import models
+from odoo import models, fields
 
 
 class ProductTemplate(models.Model):
@@ -16,14 +16,22 @@ class ProductTemplate(models.Model):
         if 'active' in vals.keys():
             shopify_product_template_obj = self.env['shopify.product.template.ept']
             for template in self:
-                shopify_templates = shopify_product_template_obj.search(
+                shopify_templates = shopify_product_template_obj.sudo().search(
                     [('product_tmpl_id', '=', template.id)])
                 if vals.get('active'):
-                    shopify_templates = shopify_product_template_obj.search(
+                    shopify_templates = shopify_product_template_obj.sudo().search(
                         [('product_tmpl_id', '=', template.id), ('active', '=', False)])
-                shopify_templates.write({'active': vals.get('active')})
+                shopify_templates.sudo().write({'active': vals.get('active')})
         res = super(ProductTemplate, self).write(vals)
         return res
+
+    shopify_template_count = fields.Integer(string='# Sales', compute='_compute_shopify_template_count')
+
+    def _compute_shopify_template_count(self):
+        shopify_product_template_obj = self.env['shopify.product.template.ept']
+        for template in self:
+            shopify_templates = shopify_product_template_obj.sudo().search([('product_tmpl_id', '=', template.id)])
+            template.shopify_template_count = len(shopify_templates) if shopify_templates else 0
 
 
 class ProductProduct(models.Model):
@@ -37,11 +45,11 @@ class ProductProduct(models.Model):
         if 'active' in vals.keys():
             shopify_product_product_obj = self.env['shopify.product.product.ept']
             for product in self:
-                shopify_product = shopify_product_product_obj.search(
+                shopify_product = shopify_product_product_obj.sudo().search(
                     [('product_id', '=', product.id)])
                 if vals.get('active'):
-                    shopify_product = shopify_product_product_obj.search(
+                    shopify_product = shopify_product_product_obj.sudo().search(
                         [('product_id', '=', product.id), ('active', '=', False)])
-                shopify_product.write({'active': vals.get('active')})
+                shopify_product.sudo().write({'active': vals.get('active')})
         res = super(ProductProduct, self).write(vals)
         return res

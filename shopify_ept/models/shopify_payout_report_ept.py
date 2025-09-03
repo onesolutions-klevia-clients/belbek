@@ -9,6 +9,7 @@ from odoo.exceptions import UserError
 from .. import shopify
 from ..shopify.pyactiveresource.connection import ClientError
 import ast
+from odoo.tools.float_utils import float_is_zero
 
 _logger = logging.getLogger('Shopify Payout')
 
@@ -262,7 +263,7 @@ class ShopifyPaymentReportEpt(models.Model):
         Task ID : 164126
         """
         all_statement_processed = True
-        if self.payout_transaction_ids and any(line.is_remaining_statement for line in self.payout_transaction_ids.filtered(lambda l:l.amount != 0.0)):
+        if self.payout_transaction_ids and any(line.is_remaining_statement for line in self.payout_transaction_ids.filtered(lambda l:not float_is_zero(l.amount, precision_digits=2))):
             all_statement_processed = False
         return all_statement_processed
 
@@ -551,10 +552,16 @@ class ShopifyPaymentReportEpt(models.Model):
         currency_ids = []
         if statement_line.refund_invoice_id:
             payment_id = paid_invoices.line_ids.matched_debit_ids.debit_move_id.payment_id
-            paid_move_lines = payment_id.invoice_ids.line_ids.filtered(lambda x: x.credit != 0.0)
+            paid_move_lines = payment_id.move_id.line_ids.filtered(lambda x: not float_is_zero(x.credit, precision_digits=2))
+            if not paid_move_lines:
+                paid_move_lines = payment_id.invoice_ids.line_ids.filtered(
+                    lambda x: not float_is_zero(x.credit, precision_digits=2) and x.account_type == 'asset_receivable')
         else:
             payment_id = paid_invoices.line_ids.matched_credit_ids.credit_move_id.payment_id
-            paid_move_lines = payment_id.invoice_ids.line_ids.filtered(lambda x: x.debit != 0.0)
+            paid_move_lines = payment_id.move_id.line_ids.filtered(lambda x: not float_is_zero(x.debit, precision_digits=2))
+            if not paid_move_lines:
+                paid_move_lines = payment_id.invoice_ids.line_ids.filtered(
+                    lambda x: not float_is_zero(x.debit, precision_digits=2) and x.account_type == 'asset_receivable')
 
         for moveline in paid_move_lines:
             amount = moveline.debit - moveline.credit
@@ -647,9 +654,9 @@ class ShopifyPaymentReportEpt(models.Model):
 
         wizard = self.env['bank.rec.widget'].with_context(default_st_line_id=statement_line_id.id).new({})
         if statement_line_id.amount < 0:
-            line = wizard.line_ids.filtered(lambda x: x.credit == 0.0)
+            line = wizard.line_ids.filtered(lambda x: float_is_zero(x.credit, precision_digits=2))
         else:
-            line = wizard.line_ids.filtered(lambda x: x.credit != 0.0)
+            line = wizard.line_ids.filtered(lambda x: not float_is_zero(x.credit, precision_digits=2))
         transaction_type = statement_line_id.shopify_transaction_type
         transaction_account_line = self.instance_id.transaction_line_ids.filtered(
             lambda x: x.transaction_type == transaction_type)

@@ -4,7 +4,7 @@
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
@@ -436,7 +436,7 @@ class ShopifyProductProductEpt(models.Model):
         @author: Nilesh Parmar @Emipro Technologies Pvt. Ltd on date 15/11/2019.
         @change : pass lang_id on context by Nilam Kubavat for task id : 190111 at 19/05/2022
         """
-        published_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        published_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         if is_publish == "unpublish_product":
             new_product.published_at = None
             new_product.published_scope = "null"
@@ -739,6 +739,15 @@ class ShopifyProductProductEpt(models.Model):
                     try:
                         shopify.InventoryLevel.set(location_id.shopify_location_id, shopify_product.inventory_item_id,
                                                    int(quantity))
+                    except ResourceNotFound as error:
+                        if hasattr(error, "response"):
+                            message = "Error while Export stock for Product ID: %s & Product Name: '%s' for instance:" \
+                                      "'%s'not found in Shopify store\nError: %s\n%s" % (
+                                          odoo_product.id, odoo_product.name, instance.name,
+                                          str(error.response.code) + " " + error.response.msg,
+                                          json.loads(error.response.body.decode()).get("errors")[0]
+                                      )
+                            log_lines.append(self.shopify_create_log(instance, message, model))
                     except ClientError as error:
                         if hasattr(error,
                                    "response") and error.response.code == 429 and error.response.msg == "Too Many Requests":
@@ -758,15 +767,6 @@ class ShopifyProductProductEpt(models.Model):
                                                            json.loads(error.response.body.decode()).get("errors")[0]
                                                            )
                         log_lines.append(self.shopify_create_log(instance, message, model))
-                    except ResourceNotFound as error:
-                        if hasattr(error, "response"):
-                            message = "Error while Export stock for Product ID: %s & Product Name: '%s' for instance:" \
-                                      "'%s'not found in Shopify store\nError: %s\n%s" % (
-                                          odoo_product.id, odoo_product.name, instance.name,
-                                          str(error.response.code) + " " + error.response.msg,
-                                          json.loads(error.response.body.decode()).get("errors")[0]
-                                      )
-                            log_lines.append(self.shopify_create_log(instance, message, model))
                     except Exception as error:
                         message = "Error while Export stock for Product ID: %s & Product Name: '%s' for instance: " \
                                   "'%s'\nError: %s" % (odoo_product.id, odoo_product.name, instance.name, str(error))

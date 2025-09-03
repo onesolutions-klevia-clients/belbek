@@ -7,7 +7,7 @@ import json
 import logging
 import time
 from builtins import int
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 from dateutil import parser
 import pytz
@@ -1199,7 +1199,7 @@ class ShopifyProductTemplateEpt(models.Model):
         odoo.
         """
         common_log_line_obj = self.env["common.log.lines.ept"]
-        published_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        published_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         instance = self.shopify_instance_id
         instance.connect_in_shopify()
         if self.shopify_tmpl_id:

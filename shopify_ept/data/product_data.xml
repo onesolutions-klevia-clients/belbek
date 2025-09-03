@@ -59,6 +59,9 @@
         </record>
 
     </data>
+    <data>
+        <function model="shopify.instance.ept" name="create_update_correct_shipping_product"/>
+    </data>
 </odoo>
 
 
