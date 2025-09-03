@@ -23,7 +23,7 @@
                      invisible="not is_action_require or state == 'completed'">
                     <strong>
                         - Need to process this queue manually.
-                        There are 3 attempts been made by automated action to process this queue,
+                        There are 5 attempts been made by automated action to process this queue,
                         but due to some reason it couldn't process it.
                         <br/>
                         - Ignore, if this queue is already processed.

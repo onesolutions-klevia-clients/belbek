@@ -168,7 +168,13 @@ class ShopifyResPartnerEpt(models.Model):
 
         first_name = vals.get("first_name")
         last_name = vals.get("last_name")
-        name = "%s %s" % (first_name, last_name)
+        #name = "%s %s" % (first_name, last_name)
+
+        name = ""
+        if first_name:
+            name = "%s" % first_name
+        if last_name:
+            name += " %s" % last_name if name else "%s" % last_name
 
         zipcode = vals.get("zip")
         state_code = vals.get("province_code")

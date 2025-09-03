@@ -267,11 +267,18 @@
                         </page>
                         <page string="Tax Configuration" name="tax_configuration">
                             <group>
-                                <field name="shopify_tax_grid_id" string="Tax Grid"
-                                       options="{'no_quick_create':True,'no_create_edit':True,'no_open': True,}"/>
-                                <field name="shopify_tax_group_id" string="Tax Group"
-                                       options="{'no_quick_create':True,'no_create_edit':True,'no_open': True,}"/>
+                                <group>
+                                    <field name="shopify_tax_grid_id" string="Tax Grid"
+                                           options="{'no_quick_create':True,'no_create_edit':True,'no_open': True,}"/>
+                                </group>
+                                <group>
+                                    <field name="is_create_tax_group" string="Auto Create Tax Group?"/>
+                                    <field name="tax_group_payable_account_id" string="Tax Payable Account"
+                                           options="{'no_quick_create':True,'no_create_edit':True,'no_open': True,}"/>
+                                    <field name="tax_group_receivable_account_id" string="Tax Receivable Account"
+                                           options="{'no_quick_create':True,'no_create_edit':True,'no_open': True,}"/>
 
+                                </group>
                             </group>
                         </page>
                     </notebook>

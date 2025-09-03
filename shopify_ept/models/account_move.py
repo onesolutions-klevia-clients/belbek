@@ -53,15 +53,15 @@ class AccountMove(models.Model):
             Task Id : 179257
         """
         context = dict(self._context)
-        context.update({'active_model': 'account.invoice', 'active_id': self.id, 'active_ids': self.ids})
+        context.update({'active_model': 'account.move', 'active_id': self.id, 'active_ids': self.ids})
         view_id = self.env.ref('shopify_ept.shopify_multi_payment_gateway_tree_view_ept').id
         return {
             'name': _('Multi payments'),
             'type': 'ir.actions.act_window',
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'res_model': 'shopify.order.payment.ept',
             'view_id': view_id,
-            'views': [(view_id, 'tree')],
+            'views': [(view_id, 'list')],
             'domain': [('id', 'in', self.line_ids.sale_line_ids.order_id.shopify_payment_ids.ids)],
             "target": "new",
             'context': context

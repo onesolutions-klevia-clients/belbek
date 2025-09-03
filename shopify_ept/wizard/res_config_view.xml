@@ -1007,25 +1007,24 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                        <div class="col-xs-12 col-md-6 o_setting_box"
+                             invisible="shopify_apply_tax_in_order != 'create_shopify_tax'">
                             <div class="o_setting_right_pane"
                                  invisible="shopify_apply_tax_in_order != 'create_shopify_tax'">
                                 <label for="shopify_tax_grid_id"/>
+                                <div class="text-muted">
+                                    Tax distribution line that caused the creation
+                                    of this move line, if any
+                                </div>
                                 <div class="content-group">
                                     <div class="mt16">
                                         <field name="shopify_tax_grid_id"
                                                class="o_light_label"/>
                                     </div>
                                 </div>
-                                <label for="shopify_tax_group_id"/>
-                                <div class="content-group">
-                                    <div class="mt16">
-                                        <field name="shopify_tax_group_id"
-                                               class="o_light_label"/>
-                                    </div>
-                                </div>
                             </div>
                         </div>
-
                         <div class="col-xs-12 col-md-6 o_setting_box"
                              invisible="shopify_apply_tax_in_order == 'odoo_tax'">
                             <div class="o_setting_right_pane">
@@ -1059,6 +1058,49 @@
                                     <div class="mt16">
                                         <field name="shopify_invoice_tax_account_id"
                                                required="shopify_apply_tax_in_order == 'create_shopify_tax' and shopify_instance_id"
+                                               class="o_light_label"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xs-12 col-md-6 o_setting_box"
+                             invisible="shopify_apply_tax_in_order != 'create_shopify_tax'">
+                            <div class="o_setting_left_pane">
+                                <field name="is_create_tax_group" style="margin-left: -0.5em"/>
+                            </div>
+                            <div class="o_setting_right_pane">
+                                <label for="is_create_tax_group"/>
+                                <div class="text-muted">
+                                    Enable this field to create the Tax group when new tax is created in odoo
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xs-12 col-md-6 o_setting_box"
+                             invisible="is_create_tax_group != True or shopify_apply_tax_in_order != 'create_shopify_tax'">
+                            <div class="o_setting_right_pane">
+                                <label for="tax_group_payable_account_id"/>
+                                <div class="text-muted">
+                                    For Tax Group<br/>
+                                    Tax current account used as a counterpart to the Tax Closing
+                                    Entry when in favor of the authorities.
+                                </div>
+                                <div class="content-group">
+                                    <div class="mt16">
+                                        <field name="tax_group_payable_account_id"
+                                               required="is_create_tax_group and shopify_instance_id"
+                                               class="o_light_label"/>
+                                    </div>
+                                </div>
+                                <label for="tax_group_receivable_account_id"/>
+                                <div class="text-muted">
+                                    For Tax Group<br/>
+                                    Tax current account used as a counterpart to the Tax Closing
+                                    Entry when in favor of the company.
+                                </div>
+                                <div class="content-group">
+                                    <div class="mt16">
+                                        <field name="tax_group_receivable_account_id"
+                                               required="is_create_tax_group and shopify_instance_id"
                                                class="o_light_label"/>
                                     </div>
                                 </div>

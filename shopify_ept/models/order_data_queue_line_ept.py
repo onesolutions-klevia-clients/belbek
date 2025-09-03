@@ -6,6 +6,7 @@ import time
 from odoo import models, fields
 from .. import shopify
 from ..shopify.pyactiveresource.connection import ClientError
+from dateutil.relativedelta import relativedelta
 
 _logger = logging.getLogger("Shopify Order Queue Line")
 
@@ -49,14 +50,17 @@ class ShopifyOrderDataQueueLineEpt(models.Model):
         # get transaction data call api
         result = []
         transactions = []
+        in_shop_currency = (not instance.order_visible_currency)
         if len(order_dict.get('payment_gateway_names')) >= 1:
             try:
-                transactions = shopify.Transaction().find(order_id=order_dict.get('id'))
+                transactions = shopify.Transaction().find(order_id=order_dict.get('id'),
+                                                          in_shop_currency=in_shop_currency)
             except ClientError as error:
                 if hasattr(error,
                            "response") and error.response.code == 429 and error.response.msg == "Too Many Requests":
                     time.sleep(int(float(error.response.headers.get('Retry-After', 5))))
-                    transactions = shopify.Transaction().find(order_id=order_dict.get('id'))
+                    transactions = shopify.Transaction().find(order_id=order_dict.get('id'),
+                                                              in_shop_currency=in_shop_currency)
             for transaction in transactions:
                 transaction_dict = transaction.to_dict()
                 result.append(transaction_dict)
@@ -240,7 +244,8 @@ class ShopifyOrderDataQueueLineEpt(models.Model):
         order_data_queue_list = self._cr.dictfetchall()
         order_queue_list = [queue_data.get('id') for queue_data in order_data_queue_list]
         if order_queue_list:
-            queues = shopify_order_queue_obj.browse(order_queue_list)
+            queues = shopify_order_queue_obj.browse(list(set(order_queue_list)))
+            _logger.info(f'Order Process by Cron using Queues : {queues}')
             self.filter_order_queue_lines_and_post_message(queues)
 
     def filter_order_queue_lines_and_post_message(self, queues):
@@ -256,13 +261,14 @@ class ShopifyOrderDataQueueLineEpt(models.Model):
             "shopify_ept.process_shopify_order_queue")
 
         for queue in queues:
+            _logger.info(f"Processing the Queue {queue.name} by Process Order Queue Cron")
             order_data_queue_line_ids = queue.order_data_queue_line_ids.filtered(lambda x: x.state == "draft")
 
             # For counting the queue crashes and creating schedule activity for the queue.
             queue.queue_process_count += 1
-            if queue.queue_process_count > 3:
+            if queue.queue_process_count > 5:
                 queue.is_action_require = True
-                note = "<p>Need to process this order queue manually.There are 3 attempts been made by " \
+                note = "<p>Need to process this order queue manually.There are 5 attempts been made by " \
                        "automated action to process this queue,<br/>- Ignore, if this queue is already processed.</p>"
                 queue.message_post(body=note)
                 if queue.shopify_instance_id.is_shopify_create_schedule:
@@ -304,3 +310,18 @@ class ShopifyOrderDataQueueLineEpt(models.Model):
 
             if instance.is_shopify_create_schedule:
                 queue_id.create_schedule_activity(queue_id)
+
+    def auto_reset_order_queue_data_process_count(self):
+        """
+        This Method reset the process count to Zero for the queues which has been failed more than
+        5 times.
+        """
+        order_queue_obj = self.env['shopify.order.data.queue.ept']
+        datetime_min = fields.Datetime.today() - relativedelta(days=1)
+        order_queues = order_queue_obj.search(
+            [('is_action_require', '=', True), ('create_date', '>=', datetime_min), ('state', '!=', 'completed')])
+        if order_queues:
+            order_queues.write({'is_action_require': False, 'queue_process_count': 0})
+            note = 'Reset the queue Process count to zero, so that the queue can automatically process'
+            [queue.message_post(body=note) for queue in order_queues]
+        return True

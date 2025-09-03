@@ -105,6 +105,7 @@ class ShopifyInstanceConfig(models.TransientModel):
         vals = self.prepare_val_for_instance_creation(shop_detail)
 
         shopify_instance = instance_obj.create(vals)
+        shopify_instance.create_update_correct_shipping_product()
         shopify_location_obj.import_shopify_locations(shopify_instance)
 
         payment_gateway_obj.import_payment_gateway(shopify_instance)
@@ -453,7 +454,16 @@ class ResConfigSettings(models.TransientModel):
                                           ondelete='restrict',
                                           domain=[('applicability', '=', 'taxes')],
                                           help="Tax distribution line that caused the creation of this move line, if any")
-    shopify_tax_group_id = fields.Many2one(comodel_name='account.tax.group', string="Tax Group")
+    is_create_tax_group = fields.Boolean(string="Auto Create Tax Group?", default=False, copy=False)
+
+    tax_group_payable_account_id = fields.Many2one(
+        comodel_name='account.account',
+        string='Tax Payable Account',
+        help="Tax current account used as a counterpart to the Tax Closing Entry when in favor of the authorities.")
+    tax_group_receivable_account_id = fields.Many2one(
+        comodel_name='account.account',
+        string='Tax Receivable Account',
+        help="Tax current account used as a counterpart to the Tax Closing Entry when in favor of the company.")
 
     @api.onchange("shopify_instance_id")
     def onchange_shopify_instance_id(self):
@@ -519,7 +529,9 @@ class ResConfigSettings(models.TransientModel):
             self.auto_create_product_category = instance.auto_create_product_category or False
             self.shopify_instance_product_category = instance.shopify_instance_product_category or False
             self.shopify_tax_grid_id = instance.shopify_tax_grid_id or False
-            self.shopify_tax_group_id = instance.shopify_tax_group_id or False
+            self.is_create_tax_group = instance.is_create_tax_group or False
+            self.tax_group_payable_account_id = instance.tax_group_payable_account_id or False
+            self.tax_group_receivable_account_id = instance.tax_group_receivable_account_id or False
 
     def execute(self):
         """This method used to set value in an instance of configuration.
@@ -595,7 +607,9 @@ class ResConfigSettings(models.TransientModel):
             values['auto_create_product_category'] = self.auto_create_product_category or False
             values['shopify_instance_product_category'] = self.shopify_instance_product_category or False
             values['shopify_tax_grid_id'] = self.shopify_tax_grid_id or False
-            values['shopify_tax_group_id'] = self.shopify_tax_group_id or False
+            values['is_create_tax_group'] = self.is_create_tax_group or False
+            values['tax_group_payable_account_id'] = self.tax_group_payable_account_id or False
+            values['tax_group_receivable_account_id'] = self.tax_group_receivable_account_id or False
 
             # added this condition to set analytic account based on configuration.
             if not self.shopify_is_use_analytic_account:
@@ -604,7 +618,12 @@ class ResConfigSettings(models.TransientModel):
             # added this condition to set tax grid based on configuration.
             if self.shopify_apply_tax_in_order != 'create_shopify_tax':
                 values["shopify_tax_grid_id"] = False
-                values['shopify_tax_group_id'] = False
+                values["is_create_tax_group"] = False
+                values["tax_group_payable_account_id"] = False
+                values["tax_group_receivable_account_id"] = False
+            if self.shopify_apply_tax_in_order == 'create_shopify_tax' and not self.is_create_tax_group:
+                values["tax_group_payable_account_id"] = False
+                values["tax_group_receivable_account_id"] = False
 
             product_webhook_changed = customer_webhook_changed = order_webhook_changed = False
             if instance.create_shopify_products_webhook != self.create_shopify_products_webhook:

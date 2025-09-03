@@ -3,6 +3,7 @@
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+from odoo.tools.float_utils import float_is_zero
 
 
 class ShopifyOrderPayment(models.Model):
@@ -40,5 +41,5 @@ class ShopifyOrderPayment(models.Model):
         @author: Meera Sidapara @Emipro Technologies Pvt. Ltd on date 26 November 2021 .
         Task_id: 179257
         """
-        if self.refund_amount == 0.0:
+        if float_is_zero(self.refund_amount, precision_digits=2):
             raise UserError(_('The Refund Amount should be greater than 0.0'))

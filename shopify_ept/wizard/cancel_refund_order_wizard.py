@@ -5,6 +5,7 @@ import json
 from odoo import models, fields, _
 from odoo.exceptions import UserError
 from .. import shopify
+from odoo.tools.float_utils import float_is_zero
 
 
 class ShopifyCancelRefundOrderWizard(models.TransientModel):
@@ -338,10 +339,10 @@ class ShopifyCancelRefundOrderWizard(models.TransientModel):
         payment_gateway = False
         for transaction in transactions:
             result = transaction.to_dict()
-            for payment_gateway, remaining_amount_str in final_payment_data.items():
+            for payments_gateway, remaining_amount_str in final_payment_data.items():
                 remaining_amount = float(remaining_amount_str)
-                if (remaining_amount >= refund_amount) and (payment_gateway == result.get('gateway')):
-                    payment_gateway = payment_gateway
+                if (remaining_amount >= refund_amount) and (payments_gateway == result.get('gateway')):
+                    payment_gateway = payments_gateway
                     parent_id = result.get('id')
         return parent_id, payment_gateway
 
@@ -355,7 +356,8 @@ class ShopifyCancelRefundOrderWizard(models.TransientModel):
         """
         total_refund_in_shopify = 0.0
         total_order_amount = order.amount_total
-        transactions = shopify.Transaction().find(order_id=order.shopify_order_id)
+        in_shop_currency = (not order.shopify_instance_id.order_visible_currency)
+        transactions = shopify.Transaction().find(order_id=order.shopify_order_id, in_shop_currency=in_shop_currency)
         parent_id = False
         gateway = False
         refund_payment_gateway = False
@@ -379,8 +381,8 @@ class ShopifyCancelRefundOrderWizard(models.TransientModel):
             return refund_parent_id, refund_payment_gateway
         if total_refund_amount > total_order_amount:
             raise UserError(
-                _("You can't refund then actual payment, requested amount for refund %s, maximum refund allow %s") % (
-                    refund_amount, maximum_refund_allow))
+                _("You can't refund then actual payment, requested amount for refund %s, maximum refund allow %s, Order amount is %s") % (
+                    refund_amount, maximum_refund_allow, total_order_amount))
         return parent_id, gateway, transactions
 
     def prepare_shopify_refund_vals(self, parent_id, gateway, refund_amount, order, shipping, refund_lines_list):
@@ -398,7 +400,7 @@ class ShopifyCancelRefundOrderWizard(models.TransientModel):
                                                                    order_payment.payment_gateway_id.code)
                 transactions.append(transaction)
                 remaining_refund_amount = order_payment.remaining_refund_amount - order_payment.refund_amount
-                is_fully_refunded = True if remaining_refund_amount == 0.0 else False
+                is_fully_refunded = True if float_is_zero(remaining_refund_amount, precision_digits=2) else False
                 order_payment.write(
                     {'remaining_refund_amount': round(remaining_refund_amount, 2),
                      'is_fully_refunded': is_fully_refunded})
