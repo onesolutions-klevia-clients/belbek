@@ -1,0 +1,4 @@
+[submodule "onesolutions_suite"]
+	path = onesolutions_suite
+	url = git@github.com:onesolutions-klevia/onesolutions_suite.git
+	branch = 18.0
