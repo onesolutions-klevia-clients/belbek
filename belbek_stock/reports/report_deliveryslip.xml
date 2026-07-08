@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data>
+
+        <template id="report_delivery_document" inherit_id="stock.report_delivery_document">
+            <xpath expr="//div[@id='informations']" position="inside">
+                <t t-set="sale_partner_email" t-value="o._get_sale_partner_email()"/>
+                <div t-if="sale_partner_email" class="col col-3 mw-100 mb-2" name="div_sale_partner_email">
+                    <strong>Customer Email</strong>
+                    <div class="m-0"><t t-out="sale_partner_email"/></div>
+                </div>
+            </xpath>
+        </template>
+
+    </data>
+</odoo>
