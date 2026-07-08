@@ -16,5 +16,5 @@ msgstr ""
 
 #. module: belbek_stock
 #: model_terms:ir.ui.view,arch_db:belbek_stock.report_delivery_document
-msgid "Customer Email"
-msgstr "E-mail du client"
+msgid "<strong>Customer Email</strong>"
+msgstr "<strong>E-mail du client</strong>"
