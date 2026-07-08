@@ -10,9 +10,12 @@ Adds the sale order customer's email to the delivery slip PDF
 
 The email shown is that of the **sale order customer**
 (`sale.order.partner_id`) — **not** the email of the address set on the
-picking itself. When a picking is linked to several sale orders (through its
-stock moves), the first valid (non-empty, well-formed) customer email found,
-in ascending sale order id order, is displayed.
+picking itself. Only sale orders imported from Shopify (with a
+`shopify_order_id` set) are considered; any other linked order is ignored.
+When a picking is linked to several Shopify sale orders (through its stock
+moves), the first valid (non-empty, well-formed) customer email found, in
+ascending sale order id order, is displayed. If no valid Shopify order
+customer email exists, nothing is shown.
 
 This works with both the standard delivery slip layout and the DIN 5008
 layout, since the field is added to the shared document body
@@ -22,6 +25,8 @@ layout, since the field is added to the shared document body
 
 - `sale_stock` — provides the `stock.picking.sale_id` field and the
   `stock.move.sale_line_id` link used to resolve the linked sale orders.
+- `shopify_ept` — provides the `sale.order.shopify_order_id` field used to
+  restrict the lookup to Shopify orders.
 
 ## Key models / methods
 
@@ -30,5 +35,8 @@ layout, since the field is added to the shared document body
 
 ## Version history
 
+- `18.0.1.0.1` — restrict the email lookup to Shopify sale orders
+  (`shopify_order_id` set); ignore other linked orders. Adds a dependency on
+  `shopify_ept`.
 - `18.0.1.0.0` — initial release: display the linked sale order customer's
   email in the delivery slip Information section.

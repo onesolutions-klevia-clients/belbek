@@ -27,9 +27,10 @@ class TestStockPickingSaleEmail(TransactionCase):
         cls.stock_location = warehouse.lot_stock_id
         cls.customer_location = cls.env.ref('stock.stock_location_customers')
 
-    def _create_sale_order(self, partner):
+    def _create_sale_order(self, partner, shopify_order_id='12345'):
         return self.env['sale.order'].create({
             'partner_id': partner.id,
+            'shopify_order_id': shopify_order_id,
             'order_line': [(0, 0, {
                 'product_id': self.product.id,
                 'product_uom_qty': 1,
@@ -79,3 +80,21 @@ class TestStockPickingSaleEmail(TransactionCase):
         order = self._create_sale_order(self.partner_no_email)
         picking = self._create_picking(order)
         self.assertEqual(picking._get_sale_partner_email(), '')
+
+    def test_non_shopify_order_is_ignored(self):
+        """An order without a shopify_order_id is ignored, so nothing shows."""
+        order = self._create_sale_order(self.partner_a, shopify_order_id=False)
+        picking = self._create_picking(order)
+        self.assertEqual(picking._get_sale_partner_email(), '')
+
+    def test_only_shopify_orders_are_considered(self):
+        """A non-Shopify order is skipped in favour of a valid Shopify one.
+
+        The first order (by id) is not a Shopify order even though its
+        customer has an email; it must be ignored. The second order is a
+        Shopify order, so its customer email is returned.
+        """
+        order_1 = self._create_sale_order(self.partner_a, shopify_order_id=False)
+        order_2 = self._create_sale_order(self.partner_b)
+        picking = self._create_picking(order_1 | order_2)
+        self.assertEqual(picking._get_sale_partner_email(), 'partner.b@example.com')
